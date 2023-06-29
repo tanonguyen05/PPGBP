@@ -4,10 +4,12 @@ from datetime import datetime
 import csv
 from collections import deque
 import time
+import queue
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import matplotlib.widgets as widgets
 
 class SerialPlotter:
     def __init__(self, port, baudrate=115200, max_len=500, plot_interval=1, csv_filename=None):
@@ -19,15 +21,13 @@ class SerialPlotter:
         self._animation = None 
 
         # Initialize containers
-        self.timestamps = deque(np.arange(self.max_len), maxlen=self.max_len)
-        self.adc1 = deque(np.zeros(self.max_len), maxlen=self.max_len)
-        self.adc2 = deque(np.zeros(self.max_len), maxlen=self.max_len)
+        self.timestamps = deque(maxlen=self.max_len)
+        self.adc1 = deque(maxlen=self.max_len)
+        self.adc2 = deque(maxlen=self.max_len)
         self._last_timestamp = 0
-        self._last_adc = 0
         self._last_adc1 = 0
         self._last_adc2 = 0
         self._isChannel1 = True
-        self.counter = 0
         self.time_start = time.time()
 
         # Initialize plots
@@ -43,6 +43,14 @@ class SerialPlotter:
         self._serial_thread = threading.Thread(target=self._read_serial)
         self._stop_event = threading.Event()
         
+        # Initialize a button for stopping the data acquisition
+        self._stop_button_ax = self._fig.add_axes([0.85, 0.025, 0.1, 0.04])
+        self._stop_button = widgets.Button(self._stop_button_ax, 'Stop')
+        self._stop_button.on_clicked(self._on_stop_button_clicked)
+                
+        # Data writing thread
+        self.csv_queue = queue.Queue()
+        self._csv_thread = threading.Thread(target=self._write_csv)
         
     def start(self):
         # background thread
@@ -66,33 +74,29 @@ class SerialPlotter:
                 continue
             except IndexError:
                 continue
-            # if len(serial_line) != 2: # incomplete line
-            #     continue
             if serial_line == '/':
-            #     self.counter += 1
                 continue
             ppg = serial_line
-            # self._last_timestamp = self.counter
-            self._last_adc = int(ppg)
 
             if self._isChannel1:
-                self._last_adc1 = self._last_adc
-                self.adc1.append(self._last_adc)
+                self._last_adc1 = int(ppg)
+                self.adc1.append(self._last_adc1)
                 self._isChannel1 = False
             else:
-                self._last_adc2 = self._last_adc
-                self.adc2.append(self._last_adc)
+                self._last_adc2 = int(ppg)
+                self.adc2.append(self._last_adc2)
+                self._last_timestamp = time.time()-self.time_start
+                self.timestamps.append(self._last_timestamp)
                 self._isChannel1 = True
-            
-            self._last_timestamp = time.time()-self.time_start
-            self.timestamps.append(self._last_timestamp)
         
             if self.csv_filename and self._isChannel1:
-                with open(self.csv_filename, 'a', newline='') as csvfile:
-                    writer = csv.writer(csvfile)
-                    writer.writerow([self._last_timestamp, self._last_adc1, self._last_adc2])
+                self.csv_queue.put([self._last_timestamp, self._last_adc1, self._last_adc2])
             
     def _update_plots(self, frame):
+        # Check if adc1 and adc2 are empty
+        if not self.adc1 or not self.adc2 or len(self.adc1) != len(self.timestamps) or len(self.adc2) != len(self.timestamps):
+            return
+        
         # Update plot data
         self._line1.set_xdata(self.timestamps)
         self._line1.set_ydata(self.adc1)
@@ -108,7 +112,21 @@ class SerialPlotter:
         self._line2.set_color('b')
 
         return self._line1, self._line2
-        
+    
+    def _write_csv(self):
+        if self.csv_filename:
+            with open(self.csv_filename, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                while True:
+                    data = self.csv_queue.get()
+                    if data is None:
+                        break
+                    writer.writerow(data)
+    
+    def _on_stop_button_clicked(self, event):
+        self.stop()
+        plt.close(self._fig)
+    
 if __name__ == '__main__':
      # Find the correct serial port for your device
     import serial.tools.list_ports
@@ -129,10 +147,10 @@ if __name__ == '__main__':
     second = now.strftime('%S')
     filename = '-'.join([year, month, day, hour, minute, second])
 
-    serial_plotter = SerialPlotter(serial_port, csv_filename=filename+'.txt')
+    serial_plotter = SerialPlotter(serial_port, csv_filename='result/'+filename+'.txt')
     # serial_plotter = SerialPlotter(serial_port)
     serial_plotter.start()
     plt.show(block=True)
 
-    input('Press Enter to stop...\n')
+    # input('Press Enter to stop...\n')
     serial_plotter.stop()
