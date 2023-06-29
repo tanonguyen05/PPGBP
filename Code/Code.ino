@@ -4,6 +4,7 @@ MAX30105 Sensor_0;
 MAX30105 Sensor_1;
 
 int val;
+int time_now;
 
 #define TCA_Address 0x70 // TCA9548A Encoders address
 
@@ -27,7 +28,7 @@ void setup()
   byte ledBrightness = 0x1F; //Options: 0=Off to 255=50mA
   byte sampleAverage = 8; //Options: 1, 2, 4, 8, 16, 32
   byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
-  int sampleRate = 400; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+  int sampleRate = 1000; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
   int pulseWidth = 411; //Options: 69, 118, 215, 411
   int adcRange = 4096; //Options: 2048, 4096, 8192, 16384
 
@@ -56,6 +57,8 @@ void setup()
 
 void loop()
 {
+  // time_now = millis();
+  // Serial.println(time_now);
   tcaselect(0);
   val = Sensor_0.getIR();
   Serial.println(val); //Send raw data to plotter
@@ -64,5 +67,5 @@ void loop()
   Serial.println(val); //Send raw data to plotter
   Serial.println("/");
   Serial.flush();
-  delay(1000);
+  // delay(1000);
 }
