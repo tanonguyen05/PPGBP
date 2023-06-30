@@ -78,6 +78,8 @@ class SerialPlotter:
                 continue
             except IndexError:
                 continue
+            except ValueError:
+                continue
             if serial_line == '/':
                 continue
             ppg = serial_line
@@ -93,10 +95,10 @@ class SerialPlotter:
                 self.timestamps.append(self._last_timestamp)
                 self._isChannel1 = True
 
-            # Write to csv
-            if self.csv_filename:
-                self.writer.writerow([self._last_timestamp, self._last_adc1, self._last_adc2])
-                self.csvfile.flush()
+                # Write to csv
+                if self.csv_filename:
+                    self.writer.writerow([self._last_timestamp, self._last_adc1, self._last_adc2])
+                    self.csvfile.flush()
             
         # Write remaining data to file
         if buffer:
@@ -149,7 +151,7 @@ if __name__ == '__main__':
     second = now.strftime('%S')
     filename = '-'.join([year, month, day, hour, minute, second])
 
-    serial_plotter = SerialPlotter(serial_port, csv_filename='result/'+filename+'.txt')
+    serial_plotter = SerialPlotter(serial_port, max_len=2000, csv_filename='result/'+filename+'.txt')
     # serial_plotter = SerialPlotter(serial_port)
     serial_plotter.start()
     plt.show(block=True)
