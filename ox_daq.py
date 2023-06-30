@@ -48,9 +48,10 @@ class SerialPlotter:
         self._stop_button = widgets.Button(self._stop_button_ax, 'Stop')
         self._stop_button.on_clicked(self._on_stop_button_clicked)
                 
-        # Data writing thread
-        self.csv_queue = queue.Queue()
-        self._csv_thread = threading.Thread(target=self._write_csv)
+        # Data writing 
+        if self.csv_filename:
+            self.csvfile = open(self.csv_filename, 'a', newline='')
+            self.writer = csv.writer(self.csvfile)
         
     def start(self):
         # background thread
@@ -62,8 +63,11 @@ class SerialPlotter:
     def stop(self):
         self._stop_event.set()
         self._serial_thread.join()
-    
+        if self.csvfile:
+            self.csvfile.close()
+        
     def _read_serial(self):
+        buffer = []
         while not self._stop_event.is_set():
         # Read data from serial port
             try:
@@ -88,9 +92,17 @@ class SerialPlotter:
                 self._last_timestamp = time.time()-self.time_start
                 self.timestamps.append(self._last_timestamp)
                 self._isChannel1 = True
-        
-            if self.csv_filename and self._isChannel1:
-                self.csv_queue.put([self._last_timestamp, self._last_adc1, self._last_adc2])
+
+            # Write to csv
+            if self.csv_filename:
+                self.writer.writerow([self._last_timestamp, self._last_adc1, self._last_adc2])
+                self.csvfile.flush()
+            
+        # Write remaining data to file
+        if buffer:
+            self.writer.writerows(buffer)
+        if self.csvfile:
+            self.csvfile.close()
             
     def _update_plots(self, frame):
         # Check if adc1 and adc2 are empty
@@ -112,16 +124,6 @@ class SerialPlotter:
         self._line2.set_color('b')
 
         return self._line1, self._line2
-    
-    def _write_csv(self):
-        if self.csv_filename:
-            with open(self.csv_filename, 'a', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                while True:
-                    data = self.csv_queue.get()
-                    if data is None:
-                        break
-                    writer.writerow(data)
     
     def _on_stop_button_clicked(self, event):
         self.stop()
